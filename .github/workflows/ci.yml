@@ -21,8 +21,5 @@ jobs:
       - name: Install dependencies
         run: make install
 
-      - name: Lint and test
-        run: make check
-
-      - name: Score repo
-        run: make score-repo
+      - name: Validate
+        run: make validate

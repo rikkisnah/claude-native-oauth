@@ -1,4 +1,4 @@
-# ADR 003: Use a score wrapper for external architecture scoring
+# ADR 003: Keep repository scoring self-contained
 
 ## Status
 
@@ -6,11 +6,12 @@ Accepted
 
 ## Decision
 
-The repository remains independent while `scripts/score_repo.py` projects it
-into the shape expected by the external scorecard.
+The repository remains independent while `scripts/score_repo.py` evaluates the
+repo directly with in-repo score logic.
 
 ## Rationale
 
-The external score script assumes a repository layout that does not match this
-project. A wrapper keeps the repo independent while still using the scoring
-system in a repeatable way.
+The earlier score flow depended on an out-of-repo scorer and leaked
+machine-specific assumptions into this project. The current scorecard keeps the
+check reproducible in CI while ensuring every required scoring dependency lives
+inside this repository.

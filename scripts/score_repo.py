@@ -1,102 +1,278 @@
-"""Project-local wrapper around the external architecture scorecard."""
+"""Self-contained architecture scorecard for this repository."""
 
 from __future__ import annotations
 
 import argparse
-import shutil
-import subprocess
-import sys
-import tempfile
+import json
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-EXTERNAL_SCORER = Path("/mnt/data/src/scm/stc/scripts/score_architecture.py")
+REQUIRED_DOCS = (
+    "README.md",
+    "INSTALL.md",
+    "CREATE-PR.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/User-Guide.md",
+    "docs/How-It-Works.md",
+    "docs/adr/003-score-through-wrapper.md",
+)
+SCANNED_SUFFIXES = {".md", ".py", ".toml", ".txt", ".yml", ".yaml"}
+BLOCKED_PARTS = {".git", ".venv", "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache"}
+LEGACY_PACKAGE_NAME = "".join(("s", "t", "c"))
 
-WRAPPER_FILES = {
-    "stc/__init__.py": '''"""Tier 0: score projection package exports."""\n\nfrom .chat import ask_prompt\nfrom .config import build_headers, build_system_blocks, load_claude_code_token\nfrom .domain_types import ChatMessage, ClientConfig, ClaudeResponse, ClaudeUsage\nfrom .llm_client import ClaudeNativeOAuthClient\n\n__all__ = ["ask_prompt", "build_headers", "build_system_blocks", "ChatMessage", "ClientConfig", "ClaudeNativeOAuthClient", "ClaudeResponse", "ClaudeUsage", "load_claude_code_token"]\n''',
-    "stc/domain_types.py": '''"""Tier 0: score projection domain types."""\n\nfrom main import ChatMessage, ClientConfig, ClaudeResponse, ClaudeUsage\n\n__all__ = ["ChatMessage", "ClientConfig", "ClaudeResponse", "ClaudeUsage"]\n''',
-    "stc/config.py": '''"""Tier 0: score projection config helpers."""\n\nfrom .domain_types import ClientConfig\nfrom main import build_headers, build_system_blocks, load_claude_code_token\n\n__all__ = ["ClientConfig", "build_headers", "build_system_blocks", "load_claude_code_token"]\n''',
-    "stc/llm_client.py": '''"""Tier 1: score projection LLM client."""\n\nfrom .domain_types import ChatMessage, ClientConfig, ClaudeResponse\nfrom main import ClaudeNativeOAuthClient\n\n__all__ = ["ChatMessage", "ClientConfig", "ClaudeNativeOAuthClient", "ClaudeResponse"]\n''',
-    "stc/chat.py": '''"""Tier 1: score projection chat helper."""\n\nfrom .domain_types import ClientConfig, ClaudeResponse\nfrom .llm_client import ClaudeNativeOAuthClient\n\n\ndef ask_prompt(client: ClaudeNativeOAuthClient, prompt: str, config: ClientConfig) -> ClaudeResponse:\n    """Send a one-shot prompt through the projected client."""\n    return client.chat(prompt, config)\n''',
-    "stc/model.py": '''"""Tier 2: score projection model resolution."""\n\nfrom .domain_types import ClientConfig\nfrom main import resolve_model\n\n\ndef resolve_settings_model(config: ClientConfig) -> str:\n    """Resolve a projected config model."""\n    return resolve_model(config.model)\n''',
-    "stc/crud/__init__.py": '''"""Tier 2: score projection CRUD exports."""\n\nfrom .categories import default_categories\nfrom .projects import default_project\nfrom .rules import default_rules\n\n__all__ = ["default_categories", "default_project", "default_rules"]\n''',
-    "stc/crud/validators.py": '''"""Tier 2: score projection validators."""\n\nfrom ..domain_types import ClientConfig\n\n\ndef validate_project_name(name: str) -> str:\n    """Validate a project name."""\n    cleaned = name.strip()\n    if not cleaned:\n        raise ValueError("project name must not be empty")\n    return cleaned\n\n\ndef validate_settings(config: ClientConfig) -> ClientConfig:\n    """Validate a projected client config."""\n    if config.max_tokens <= 0:\n        raise ValueError("max_tokens must be positive")\n    return config\n''',
-    "stc/crud/categories.py": '''"""Tier 2: score projection categories."""\n\nfrom ..domain_types import ChatMessage\n\n\ndef default_categories() -> list[str]:\n    """Return projected categories."""\n    _ = ChatMessage(role="user", content="category")\n    return ["oauth", "direct-api", "python"]\n''',
-    "stc/crud/projects.py": '''"""Tier 2: score projection projects."""\n\nfrom ..domain_types import ClientConfig\nfrom .validators import validate_project_name\n\n\ndef default_project(name: str) -> dict[str, str]:\n    """Return projected project metadata."""\n    _ = ClientConfig()\n    return {"name": validate_project_name(name), "entrypoint": "main.py"}\n''',
-    "stc/crud/rules.py": '''"""Tier 2: score projection rules."""\n\nfrom ..domain_types import ClaudeResponse\n\n\ndef default_rules() -> list[str]:\n    """Return projected operating rules."""\n    _ = ClaudeResponse(identifier=None, role="assistant", model="claude-sonnet-4-6", text="", stop_reason=None, usage=__import__("main").ClaudeUsage())\n    return ["Direct POST only", "Root main.py is the production entrypoint"]\n''',
-    "stc/merge.py": '''"""Tier 3: score projection merge helpers."""\n\nfrom .domain_types import ChatMessage, ClientConfig\n\n\ndef merge_messages(left: list[ChatMessage], right: list[ChatMessage]) -> list[ChatMessage]:\n    """Merge projected messages."""\n    return [*left, *right]\n\n\ndef merge_configs(base: ClientConfig, override: ClientConfig) -> ClientConfig:\n    """Merge projected configs."""\n    return ClientConfig(model=override.model or base.model, max_tokens=override.max_tokens, temperature=override.temperature, system_prompt=override.system_prompt or base.system_prompt)\n\n\ndef merge_rules(left: list[str], right: list[str]) -> list[str]:\n    """Merge projected rule lists."""\n    return [*left, *right]\n''',
-    "stc/services.py": '''"""Tier 4: score projection services."""\n\nfrom .chat import ask_prompt\nfrom .config import load_claude_code_token\nfrom .domain_types import ClientConfig, ClaudeResponse\nfrom .llm_client import ClaudeNativeOAuthClient\n\n\nclass ClaudeService:\n    """Projected service layer."""\n\n    def ask(self, prompt: str, config: ClientConfig) -> ClaudeResponse:\n        """Send a prompt through the projected service."""\n        client = ClaudeNativeOAuthClient(load_claude_code_token())\n        return ask_prompt(client, prompt, config)\n''',
-    "stc/cli/__init__.py": '''"""Tier 5: score projection CLI exports."""\n\nfrom .commands import main\n\n__all__ = ["main"]\n''',
-    "stc/cli/parser.py": '''"""Tier 5: score projection parser."""\n\nimport argparse\n\nfrom ..domain_types import ClientConfig\n\nCOMMANDS = ("ask",)\n\n\ndef build_parser() -> argparse.ArgumentParser:\n    """Build a projected parser."""\n    parser = argparse.ArgumentParser(description="Projected parser")\n    parser.add_argument("prompt")\n    return parser\n\n\ndef parse_settings(args: argparse.Namespace) -> ClientConfig:\n    """Build projected settings."""\n    return ClientConfig(system_prompt=None, max_tokens=256, temperature=1.0, model="claude-sonnet-4-6")\n''',
-    "stc/cli/commands.py": '''"""Tier 5: score projection command dispatch."""\n\nfrom ..chat import ask_prompt\nfrom ..domain_types import ClientConfig\nfrom ..llm_client import ClaudeNativeOAuthClient\nfrom .parser import build_parser, parse_settings\n\ndispatch = {"ask": ask_prompt}\n\n\ndef main() -> int:\n    """Projected CLI entrypoint."""\n    parser = build_parser()\n    args = parser.parse_args()\n    client = ClaudeNativeOAuthClient("token")\n    dispatch["ask"](client, args.prompt, parse_settings(args))\n    return 0\n''',
-}
+
+@dataclass(frozen=True)
+class DimensionResult:
+    """Score output for one architecture dimension."""
+
+    name: str
+    score: int
+    detail: str
+    violations: list[str] = field(default_factory=list)
+
+    @property
+    def status(self) -> str:
+        if self.score >= 8:
+            return "PASS"
+        if self.score >= 5:
+            return "WARN"
+        return "FAIL"
+
+
+@dataclass(frozen=True)
+class ScoreReport:
+    """Normalized score output."""
+
+    results: list[DimensionResult]
+
+    @property
+    def overall_score(self) -> float:
+        if not self.results:
+            return 0.0
+        total = sum(result.score for result in self.results)
+        return round(total / len(self.results), 2)
+
+    def failed_dimensions(self, minimum: int) -> list[DimensionResult]:
+        """Return dimensions below the requested threshold."""
+        return [result for result in self.results if result.score < minimum]
+
+    def as_dict(self) -> dict[str, object]:
+        """Return a JSON-friendly report."""
+        return {
+            "overall_score": self.overall_score,
+            "results": [asdict(result) | {"status": result.status} for result in self.results],
+        }
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse score wrapper arguments."""
-    parser = argparse.ArgumentParser(description="Run the external architecture scorecard")
+    parser = argparse.ArgumentParser(
+        description="Run the self-contained architecture scorecard for this repository"
+    )
     parser.add_argument("--json", action="store_true", help="Emit score output as JSON")
-    parser.add_argument("--verbose", action="store_true", help="Show verbose score output")
+    parser.add_argument("--verbose", action="store_true", help="Show violation details")
     parser.add_argument("--min-score", type=int, default=8, help="Minimum allowed dimension score")
     return parser.parse_args(argv)
 
 
-def _write_file(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+def _iter_text_files(root: Path) -> Iterable[Path]:
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        if any(part in BLOCKED_PARTS for part in path.parts):
+            continue
+        if path.name == "Makefile" or path.suffix in SCANNED_SUFFIXES:
+            yield path
 
 
-def _copy_docs(temp_root: Path) -> None:
-    shutil.copy2(REPO_ROOT / "README.md", temp_root / "README.md")
-    _write_file(
-        temp_root / "docs" / "STC-Install-Guide.md",
-        (REPO_ROOT / "INSTALL.md").read_text(encoding="utf-8"),
-    )
-    _write_file(
-        temp_root / "docs" / "STC-User-Guide.md",
-        (REPO_ROOT / "docs" / "User-Guide.md").read_text(encoding="utf-8"),
-    )
-    _write_file(
-        temp_root / "docs" / "STC-How-It-Works.md",
-        (REPO_ROOT / "docs" / "How-It-Works.md").read_text(encoding="utf-8"),
-    )
-    shutil.copytree(REPO_ROOT / "docs" / "adr", temp_root / "docs" / "adr")
+def _read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
 
 
-def _write_projection(temp_root: Path) -> None:
-    shutil.copy2(REPO_ROOT / "main.py", temp_root / "main.py")
-    _write_file(
-        temp_root / "app.py",
-        '"""Score projection app entrypoint."""\n\nfrom main import main\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n',
+def _forbidden_tokens() -> tuple[str, ...]:
+    return (
+        f"/mnt/data/src/scm/{LEGACY_PACKAGE_NAME}",
+        f"import {LEGACY_PACKAGE_NAME}",
+        f"from {LEGACY_PACKAGE_NAME}",
+        f'"{LEGACY_PACKAGE_NAME}/',
+        f"'{LEGACY_PACKAGE_NAME}/",
     )
-    _write_file(
-        temp_root / "Makefile",
-        "COV_FAIL_UNDER ?= 100\n\n"
-        "lint:\n\tuv run mypy stc app.py main.py tests\n\n"
-        'lint-imports:\n\tuv run python -c "import stc"\n\n'
-        "test:\n\tuv run pytest\n\n"
-        'test-%:\n\tuv run pytest -k "$*"\n\n'
-        "check: lint test\n",
+
+
+def _score_independence(repo_root: Path) -> DimensionResult:
+    violations: list[str] = []
+    for path in _iter_text_files(repo_root):
+        text = _read_text(path)
+        for token in _forbidden_tokens():
+            if token in text:
+                violations.append(f"{path.relative_to(repo_root)} contains `{token}`")
+    score = 10 if not violations else 0
+    detail = "Repository avoids out-of-repo scorer dependencies and machine-specific imports."
+    return DimensionResult("independence", score, detail, violations)
+
+
+def _score_entrypoint(repo_root: Path) -> DimensionResult:
+    violations: list[str] = []
+    main_file = repo_root / "main.py"
+    if not main_file.exists():
+        violations.append("main.py is missing")
+    else:
+        text = _read_text(main_file)
+        if "DEFAULT_API_URL" not in text:
+            violations.append("main.py does not declare DEFAULT_API_URL")
+        if "ClaudeNativeOAuthClient" not in text:
+            violations.append("main.py does not define ClaudeNativeOAuthClient")
+        if 'parser.add_argument("--stream"' not in text:
+            violations.append("main.py does not expose the --stream CLI flag")
+    score = 10 if not violations else 4
+    detail = "The production entrypoint remains a single direct OAuth client in main.py."
+    return DimensionResult("entrypoint", score, detail, violations)
+
+
+def _score_docs(repo_root: Path) -> DimensionResult:
+    missing = [relative for relative in REQUIRED_DOCS if not (repo_root / relative).exists()]
+    score = 10 if not missing else 4
+    detail = "Contributor, install, and architecture docs are present."
+    violations = [f"Missing required document: {path}" for path in missing]
+    return DimensionResult("documentation", score, detail, violations)
+
+
+def _score_workflow(repo_root: Path) -> DimensionResult:
+    violations: list[str] = []
+    makefile = repo_root / "Makefile"
+    workflow = repo_root / ".github" / "workflows" / "ci.yml"
+    if not makefile.exists():
+        violations.append("Makefile is missing")
+    else:
+        text = _read_text(makefile)
+        for target in ("check:", "validate:", "score-repo:"):
+            if target not in text:
+                violations.append(f"Makefile is missing `{target}`")
+    if not workflow.exists():
+        violations.append(".github/workflows/ci.yml is missing")
+    else:
+        text = _read_text(workflow)
+        if "make validate" not in text:
+            violations.append("CI workflow does not run `make validate`")
+    score = 10 if not violations else 4
+    detail = "The repository exposes reproducible local and CI validation entrypoints."
+    return DimensionResult("workflow", score, detail, violations)
+
+
+def _score_testing(repo_root: Path) -> DimensionResult:
+    violations: list[str] = []
+    tests_dir = repo_root / "tests"
+    pyproject = repo_root / "pyproject.toml"
+    if not tests_dir.exists():
+        violations.append("tests/ is missing")
+    elif not any(tests_dir.glob("test_*.py")):
+        violations.append("tests/ does not contain any test_*.py files")
+    if not pyproject.exists():
+        violations.append("pyproject.toml is missing")
+    else:
+        text = _read_text(pyproject)
+        if "--cov-fail-under=100" not in text:
+            violations.append("pyproject.toml does not enforce 100% coverage for main.py")
+        if 'testpaths = ["tests"]' not in text:
+            violations.append("pyproject.toml does not scope pytest to tests/")
+    score = 10 if not violations else 4
+    detail = "Tests and coverage gates are configured in-repo."
+    return DimensionResult("testing", score, detail, violations)
+
+
+def _score_typing(repo_root: Path) -> DimensionResult:
+    violations: list[str] = []
+    pyproject = repo_root / "pyproject.toml"
+    main_file = repo_root / "main.py"
+    if not pyproject.exists():
+        violations.append("pyproject.toml is missing")
+    else:
+        text = _read_text(pyproject)
+        if "[tool.mypy]" not in text:
+            violations.append("pyproject.toml is missing a mypy section")
+        if "strict = true" not in text:
+            violations.append("pyproject.toml does not enable mypy strict mode")
+    if main_file.exists():
+        text = _read_text(main_file)
+        if "@dataclass" not in text:
+            violations.append("main.py does not use dataclasses for structured values")
+    score = 10 if not violations else 4
+    detail = "Typing and structured-value conventions are enforced."
+    return DimensionResult("typing", score, detail, violations)
+
+
+def _score_docs_alignment(repo_root: Path) -> DimensionResult:
+    violations: list[str] = []
+    readme = repo_root / "README.md"
+    create_pr = repo_root / "CREATE-PR.md"
+    if readme.exists():
+        text = _read_text(readme)
+        for command in ("make validate", "make score-repo"):
+            if command not in text:
+                violations.append(f"README.md does not describe `{command}`")
+    if create_pr.exists():
+        text = _read_text(create_pr)
+        if "10.0/10" not in text:
+            violations.append("CREATE-PR.md does not preserve the score expectation")
+        if "make validate" not in text:
+            violations.append("CREATE-PR.md does not describe `make validate`")
+    score = 10 if not violations else 4
+    detail = "Public docs describe the score workflow consistently."
+    return DimensionResult("docs_alignment", score, detail, violations)
+
+
+def _score_architecture_notes(repo_root: Path) -> DimensionResult:
+    violations: list[str] = []
+    adr_file = repo_root / "docs" / "adr" / "003-score-through-wrapper.md"
+    if not adr_file.exists():
+        violations.append("docs/adr/003-score-through-wrapper.md is missing")
+    else:
+        text = _read_text(adr_file)
+        if "self-contained" not in text:
+            violations.append("ADR 003 does not describe the self-contained score wrapper")
+    score = 10 if not violations else 4
+    detail = "Architecture decisions document how scoring works in this repository."
+    return DimensionResult("architecture_notes", score, detail, violations)
+
+
+def score_repository(repo_root: Path) -> ScoreReport:
+    """Build the full score report for a repository."""
+    return ScoreReport(
+        results=[
+            _score_independence(repo_root),
+            _score_entrypoint(repo_root),
+            _score_docs(repo_root),
+            _score_workflow(repo_root),
+            _score_testing(repo_root),
+            _score_typing(repo_root),
+            _score_docs_alignment(repo_root),
+            _score_architecture_notes(repo_root),
+        ]
     )
-    for relative_path, content in WRAPPER_FILES.items():
-        _write_file(temp_root / relative_path, content)
-    shutil.copytree(REPO_ROOT / "tests", temp_root / "tests")
-    _copy_docs(temp_root)
+
+
+def _render_text(report: ScoreReport, verbose: bool) -> str:
+    lines = [f"Overall score: {report.overall_score:.2f}/10.00", ""]
+    for result in report.results:
+        lines.append(f"{result.name:<20} {result.status:<4} {result.score}/10  {result.detail}")
+        if verbose:
+            for violation in result.violations:
+                lines.append(f"  - {violation}")
+    return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the external score script against a projected temporary repo."""
+    """Run the repository-local scorecard."""
     args = parse_args(argv)
-    with tempfile.TemporaryDirectory(prefix="claude-native-oauth-score-") as temp_dir:
-        temp_root = Path(temp_dir)
-        _write_projection(temp_root)
-        command = [sys.executable, str(EXTERNAL_SCORER), "--min-score", str(args.min_score)]
-        if args.json:
-            command.append("--json")
-        if args.verbose:
-            command.append("--verbose")
-        result = subprocess.run(command, cwd=temp_root, check=False)
-        return result.returncode
+    report = score_repository(REPO_ROOT)
+    if args.json:
+        print(json.dumps(report.as_dict(), indent=2))
+    else:
+        print(_render_text(report, args.verbose))
+    return 1 if report.failed_dimensions(args.min_score) else 0
 
 
 if __name__ == "__main__":

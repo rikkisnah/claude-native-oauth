@@ -10,15 +10,17 @@ explicitly ask for that.
 Run:
 
 ```bash
-make check
-make score-repo
+make validate
 ```
 
-If `make check` fails, stop. Do not proceed to staging, commit commands, or PR
-preparation until the failure is fixed and `make check` passes.
+If `make validate` fails, stop. Do not proceed to staging, commit commands, or
+PR preparation until the failure is fixed and `make validate` passes.
 
-If `make score-repo` fails or drops below `10.0/10`, stop. Do not proceed until
-the score is restored.
+`make validate` includes both `make check` and `make score-repo`. If the score
+drops below `10.0/10`, stop. Do not proceed until the score is restored.
+
+`make score-repo` must remain self-contained. Do not introduce PR changes that
+make it depend on files, scripts, or checkouts outside this repository.
 
 ## Version prompt
 
@@ -98,6 +100,5 @@ After the version answer is known, present the commands in this order:
 - Updated to `x.y.z`
 
 ## Validation
-- `make check`
-- `make score-repo`
+- `make validate`
 ```

@@ -18,7 +18,7 @@ from typing import Iterable, Iterator, Protocol, Sequence, TextIO
 
 import requests
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 DEFAULT_CREDENTIALS_PATH = Path("~/.claude/.credentials.json").expanduser()
 DEFAULT_API_URL = "https://api.anthropic.com/v1/messages"
@@ -686,7 +686,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--list-models", action="store_true", help="List supported model aliases and exit"
     )
-    parser.add_argument("prompt", nargs="?", help="Prompt text. Reads stdin when omitted.")
+    parser.add_argument("prompt", nargs="?", help="Prompt text.")
     parser.add_argument("--model", default="sonnet", help="Model alias or full model id")
     parser.add_argument("--max-tokens", type=int, default=256, help="Maximum output tokens")
     parser.add_argument("--temperature", type=float, default=0.2, help="Sampling temperature")

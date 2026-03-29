@@ -16,10 +16,10 @@ contract Claude Code expects:
 ## What is in this repo
 
 - [`main.py`](./main.py): the production implementation and CLI entrypoint
-- [`Makefile`](./Makefile): `uv`-based install, lint, test, and score targets
-- [`scripts/score_repo.py`](./scripts/score_repo.py): local wrapper around the external architecture scorecard
+- [`Makefile`](./Makefile): `uv`-based install, lint, test, validate, and score targets
+- [`scripts/score_repo.py`](./scripts/score_repo.py): self-contained architecture scorecard that lives entirely in this repository
 - [`tests`](./tests): unit tests for request construction, stream parsing, and CLI behavior
-- [`.github/workflows/ci.yml`](./.github/workflows/ci.yml): GitHub Actions CI — runs `make check` and `make score-repo` on push and PR
+- [`.github/workflows/ci.yml`](./.github/workflows/ci.yml): GitHub Actions CI — runs `make validate` on push and PR
 
 ## Documentation map
 
@@ -37,6 +37,8 @@ contract Claude Code expects:
 
 ```bash
 make install
+make validate
+make score-repo
 make hello
 uv run python main.py "Say hello in five words"
 make smoke-endpoint
@@ -48,7 +50,7 @@ uv run python main.py --repo /path/to/repo "Summarize this codebase"
 Optional local shell alias:
 
 ```bash
-alias cno='uv run --project /mnt/data/src/rikkisnah/claude-native-oauth python /mnt/data/src/rikkisnah/claude-native-oauth/main.py'
+alias cno='uv run --project /path/to/claude-native-oauth python /path/to/claude-native-oauth/main.py'
 ```
 
 Then use:
@@ -107,6 +109,10 @@ The public Anthropic API documentation does not describe the full request
 contract needed for Claude Code OAuth tokens. This project packages that
 contract into a single audited Python module so you can call the endpoint
 directly without routing through the Claude binary.
+
+The repository is also intended to be self-contained. Build, test, and scoring
+flows must not depend on files from another checkout or on machine-specific
+paths outside this repository.
 
 ## CLI features
 

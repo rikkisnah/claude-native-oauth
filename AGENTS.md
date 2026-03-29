@@ -8,7 +8,7 @@ automation helpers under [`scripts/`](./scripts), and contributor/runtime docs
 under [`docs/`](./docs). The main entrypoints are:
 
 - `main.py`: direct `POST /v1/messages?beta=true` client and CLI
-- `scripts/score_repo.py`: wrapper for the external architecture scorecard
+- `scripts/score_repo.py`: self-contained architecture scorecard implemented entirely in this repo
 - `Makefile`: standard developer commands
 - `~/.alias`: local shell shortcuts; keep the `cno` alias aligned with this repo
 
@@ -19,8 +19,9 @@ under [`docs/`](./docs). The main entrypoints are:
 - `make lint`: run `ruff` and `mypy`
 - `make test`: run `pytest` with `100%` coverage gating
 - `make check`: run lint and tests
+- `make validate`: run lint, tests, and the self-contained scorecard
 - `make hello`: send a quick hello prompt to Claude
-- `make score-repo`: run the external score wrapper
+- `make score-repo`: run the self-contained in-repo architecture scorecard
 - `uv run python main.py "Say hello"`: run the client locally
 
 ## Error Handling
@@ -45,6 +46,9 @@ rather than moving core request behavior into helper packages. Use:
 Formatting and static analysis are enforced with `ruff` and `mypy`.
 All code paths and repository-facing behavior should be documented when they
 change.
+Repository automation must remain self-contained. Do not add dependencies on
+files or scripts from sibling checkouts, absolute machine-local paths, or
+private external repositories.
 
 ## Testing Guidelines
 
@@ -60,8 +64,8 @@ Tests use `pytest` and must keep total coverage at `100%`. Name files
 Run `make test` before opening a PR. Do not merge changes that reduce coverage
 below `100%`.
 Every code change must be followed by an appropriate test run. At minimum, run
-the narrowest command that validates the change, and run `make check` for any
-meaningful behavior change.
+the narrowest command that validates the change, and run `make validate` for
+any meaningful behavior change.
 All test validation must finish at `100%` coverage.
 
 ## Documentation Rules
@@ -94,7 +98,7 @@ The repository is still new, so use short imperative commit messages such as
 should include:
 
 - a brief summary of the change
-- validation results from `make check` and `make score-repo`
+- validation results from `make validate`
 - notes on any changes to the OAuth request contract
 - confirmation that documentation was updated
 - confirmation that test coverage remains at `100%`
@@ -104,9 +108,9 @@ should include:
 ## Continuous Integration
 
 A GitHub Actions workflow at `.github/workflows/ci.yml` runs on every push to
-`main` and on every pull request targeting `main`. It executes `make check`
-(lint + 100% coverage tests) and `make score-repo` (architecture scorecard).
-All checks must pass before merging.
+`main` and on every pull request targeting `main`. It executes `make validate`
+(lint + 100% coverage tests plus the self-contained architecture scorecard in
+this repository). All checks must pass before merging.
 
 ## Security & Configuration Tips
 

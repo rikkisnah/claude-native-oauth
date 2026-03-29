@@ -13,6 +13,14 @@
 6. `POST` to `https://api.anthropic.com/v1/messages?beta=true`
 7. Parse server-sent events into a normalized response object
 
+## Repository-local scoring
+
+`make score-repo` runs `scripts/score_repo.py`, which is implemented entirely
+inside this repository. The scoring check must remain self-contained and must
+not load code, scripts, or score logic from another checkout.
+`make validate` runs the full repository gate by chaining `make check` and
+`make score-repo`.
+
 ## Why the billing block matters
 
 For Claude Code OAuth tokens, headers alone are not enough. The first system

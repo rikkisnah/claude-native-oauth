@@ -1,14 +1,14 @@
 # User Guide
 
-`main.py` accepts either a positional prompt or stdin.
+`main.py` requires a positional prompt for request execution.
 
 ## Examples
 
 ```bash
 uv run python main.py "Summarize this repository."
-printf 'Say hello' | uv run python main.py
 uv run python main.py --json "Return a short JSON-safe sentence."
 uv run python main.py --stream "Stream a short answer."
+uv run python main.py --repo /path/to/repo "Summarize this repository."
 ```
 
 ## Model selection
@@ -30,8 +30,17 @@ uv run python main.py --stop-sequences DONE END "Write until stopped."
 ```
 
 These flags are optional and omitted from the API payload when not provided.
-The `metadata` field is available via the Python API only (not exposed as a CLI
-flag).
+
+## Scorecard
+
+```bash
+make score-repo
+make validate
+```
+
+The repository scorecard is implemented locally in `scripts/score_repo.py`. It
+does not require a second checkout or any out-of-repo scorer script.
+Use `make validate` for the full repository gate: lint, tests, and scoring.
 
 ## Error handling
 

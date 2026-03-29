@@ -14,6 +14,7 @@ to install, verify, or smoke-test this repository locally.
 
 ```bash
 make install
+make validate
 ```
 
 ## Verify
@@ -60,6 +61,18 @@ uv run python main.py --top-p 0.95 "Explain quantum computing."
 uv run python main.py --top-k 40 "List three facts."
 uv run python main.py --stop-sequences DONE "Write until done."
 ```
+
+## Scorecard
+
+```bash
+make score-repo
+make validate
+```
+
+The scorecard is implemented entirely in `scripts/score_repo.py`. It does not
+read tools, scripts, or source files from another repository.
+Use `make validate` when you want the full repository gate: lint, tests, and
+scoring.
 
 ## Read a repository into the prompt
 
