@@ -134,7 +134,9 @@ def load_credentials(credentials_path: Path = DEFAULT_CREDENTIALS_PATH) -> dict[
     return payload
 
 
-def save_credentials(credentials: dict[str, object], credentials_path: Path = DEFAULT_CREDENTIALS_PATH) -> None:
+def save_credentials(
+    credentials: dict[str, object], credentials_path: Path = DEFAULT_CREDENTIALS_PATH
+) -> None:
     """Persist updated Claude credentials back to disk with restricted permissions."""
     credentials_path.write_text(json.dumps(credentials), encoding="utf-8")
     credentials_path.chmod(0o600)
@@ -180,7 +182,9 @@ def get_token_status(credentials_path: Path = DEFAULT_CREDENTIALS_PATH) -> Token
         seconds_remaining=seconds_remaining,
         is_expired=is_expired,
         should_refresh=should_refresh,
-        subscription_type=oauth.get("subscriptionType") if isinstance(oauth.get("subscriptionType"), str) else None,
+        subscription_type=oauth.get("subscriptionType")
+        if isinstance(oauth.get("subscriptionType"), str)
+        else None,
     )
 
 
@@ -188,7 +192,9 @@ def format_epoch_millis(epoch_millis: int | None) -> str | None:
     """Render epoch milliseconds as a human-friendly UTC timestamp."""
     if epoch_millis is None:
         return None
-    return datetime.fromtimestamp(epoch_millis / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return datetime.fromtimestamp(epoch_millis / 1000, tz=timezone.utc).strftime(
+        "%Y-%m-%d %H:%M:%S UTC"
+    )
 
 
 def format_seconds_remaining(seconds: float | None) -> str | None:
@@ -255,9 +261,9 @@ def refresh_claude_code_token(credentials_path: Path = DEFAULT_CREDENTIALS_PATH)
         raise ValueError("OAuth refresh response did not include access_token")
 
     expires_in = refreshed.get("expires_in")
-    expires_at = int(time.time() * 1000) + (
-        expires_in if isinstance(expires_in, int) else 3600
-    ) * 1000
+    expires_at = (
+        int(time.time() * 1000) + (expires_in if isinstance(expires_in, int) else 3600) * 1000
+    )
     payload["claudeAiOauth"] = {
         **oauth,
         "accessToken": access_token,
@@ -439,7 +445,9 @@ def _usage_from_payload(payload: object, current: ClaudeUsage) -> ClaudeUsage:
     if not isinstance(payload, dict):
         return current
     return ClaudeUsage(
-        input_tokens=payload["input_tokens"] if isinstance(payload.get("input_tokens"), int) else current.input_tokens,
+        input_tokens=payload["input_tokens"]
+        if isinstance(payload.get("input_tokens"), int)
+        else current.input_tokens,
         cache_creation_input_tokens=(
             payload["cache_creation_input_tokens"]
             if isinstance(payload.get("cache_creation_input_tokens"), int)
@@ -450,9 +458,15 @@ def _usage_from_payload(payload: object, current: ClaudeUsage) -> ClaudeUsage:
             if isinstance(payload.get("cache_read_input_tokens"), int)
             else current.cache_read_input_tokens
         ),
-        output_tokens=payload["output_tokens"] if isinstance(payload.get("output_tokens"), int) else current.output_tokens,
-        service_tier=payload["service_tier"] if isinstance(payload.get("service_tier"), str) else current.service_tier,
-        inference_geo=payload["inference_geo"] if isinstance(payload.get("inference_geo"), str) else current.inference_geo,
+        output_tokens=payload["output_tokens"]
+        if isinstance(payload.get("output_tokens"), int)
+        else current.output_tokens,
+        service_tier=payload["service_tier"]
+        if isinstance(payload.get("service_tier"), str)
+        else current.service_tier,
+        inference_geo=payload["inference_geo"]
+        if isinstance(payload.get("inference_geo"), str)
+        else current.inference_geo,
     )
 
 
@@ -525,7 +539,9 @@ class ClaudeNativeOAuthClient:
 
     def _post(self, payload: dict[str, object]) -> HTTPResponse:
         """POST the request payload, retrying once after token refresh on 401."""
-        response = self._session.post(self._api_url, **build_request_kwargs(self._auth_token, payload))
+        response = self._session.post(
+            self._api_url, **build_request_kwargs(self._auth_token, payload)
+        )
         try:
             response.raise_for_status()
             return response
@@ -534,7 +550,9 @@ class ClaudeNativeOAuthClient:
             if status_code != 401:
                 raise
             self._auth_token = refresh_claude_code_token(self._credentials_path)
-            retry = self._session.post(self._api_url, **build_request_kwargs(self._auth_token, payload))
+            retry = self._session.post(
+                self._api_url, **build_request_kwargs(self._auth_token, payload)
+            )
             retry.raise_for_status()
             return retry
 
@@ -563,7 +581,9 @@ class ClaudeNativeOAuthClient:
     ) -> Iterator[str]:
         """Yield text deltas as they arrive."""
         effective_config = config or ClientConfig()
-        for event in self._request_events([ChatMessage(role="user", content=prompt)], effective_config):
+        for event in self._request_events(
+            [ChatMessage(role="user", content=prompt)], effective_config
+        ):
             if event.get("type") != "content_block_delta":
                 continue
             delta = event.get("delta", {})
@@ -575,16 +595,32 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Direct Claude OAuth client")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    parser.add_argument("--token-status", action="store_true", help="Print Claude OAuth token status and exit")
-    parser.add_argument("--list-models", action="store_true", help="List supported model aliases and exit")
+    parser.add_argument(
+        "--token-status", action="store_true", help="Print Claude OAuth token status and exit"
+    )
+    parser.add_argument(
+        "--list-models", action="store_true", help="List supported model aliases and exit"
+    )
     parser.add_argument("prompt", nargs="?", help="Prompt text. Reads stdin when omitted.")
     parser.add_argument("--model", default="sonnet", help="Model alias or full model id")
     parser.add_argument("--max-tokens", type=int, default=256, help="Maximum output tokens")
     parser.add_argument("--temperature", type=float, default=0.2, help="Sampling temperature")
     parser.add_argument("--system-prompt", default=None, help="Optional system prompt override")
-    parser.add_argument("--repo", type=Path, default=None, help="Repository directory to read into the prompt")
-    parser.add_argument("--repo-max-files", type=int, default=DEFAULT_REPO_MAX_FILES, help="Maximum repository files to include")
-    parser.add_argument("--repo-max-bytes", type=int, default=DEFAULT_REPO_MAX_BYTES, help="Maximum repository bytes to include")
+    parser.add_argument(
+        "--repo", type=Path, default=None, help="Repository directory to read into the prompt"
+    )
+    parser.add_argument(
+        "--repo-max-files",
+        type=int,
+        default=DEFAULT_REPO_MAX_FILES,
+        help="Maximum repository files to include",
+    )
+    parser.add_argument(
+        "--repo-max-bytes",
+        type=int,
+        default=DEFAULT_REPO_MAX_BYTES,
+        help="Maximum repository bytes to include",
+    )
     parser.add_argument(
         "--credentials-path",
         type=Path,

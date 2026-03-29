@@ -48,22 +48,34 @@ def _write_file(path: Path, content: str) -> None:
 
 def _copy_docs(temp_root: Path) -> None:
     shutil.copy2(REPO_ROOT / "README.md", temp_root / "README.md")
-    _write_file(temp_root / "docs" / "STC-Install-Guide.md", (REPO_ROOT / "INSTALL.md").read_text(encoding="utf-8"))
-    _write_file(temp_root / "docs" / "STC-User-Guide.md", (REPO_ROOT / "docs" / "User-Guide.md").read_text(encoding="utf-8"))
-    _write_file(temp_root / "docs" / "STC-How-It-Works.md", (REPO_ROOT / "docs" / "How-It-Works.md").read_text(encoding="utf-8"))
+    _write_file(
+        temp_root / "docs" / "STC-Install-Guide.md",
+        (REPO_ROOT / "INSTALL.md").read_text(encoding="utf-8"),
+    )
+    _write_file(
+        temp_root / "docs" / "STC-User-Guide.md",
+        (REPO_ROOT / "docs" / "User-Guide.md").read_text(encoding="utf-8"),
+    )
+    _write_file(
+        temp_root / "docs" / "STC-How-It-Works.md",
+        (REPO_ROOT / "docs" / "How-It-Works.md").read_text(encoding="utf-8"),
+    )
     shutil.copytree(REPO_ROOT / "docs" / "adr", temp_root / "docs" / "adr")
 
 
 def _write_projection(temp_root: Path) -> None:
     shutil.copy2(REPO_ROOT / "main.py", temp_root / "main.py")
-    _write_file(temp_root / "app.py", '"""Score projection app entrypoint."""\n\nfrom main import main\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n')
+    _write_file(
+        temp_root / "app.py",
+        '"""Score projection app entrypoint."""\n\nfrom main import main\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n',
+    )
     _write_file(
         temp_root / "Makefile",
         "COV_FAIL_UNDER ?= 100\n\n"
         "lint:\n\tuv run mypy stc app.py main.py tests\n\n"
-        "lint-imports:\n\tuv run python -c \"import stc\"\n\n"
+        'lint-imports:\n\tuv run python -c "import stc"\n\n'
         "test:\n\tuv run pytest\n\n"
-        "test-%:\n\tuv run pytest -k \"$*\"\n\n"
+        'test-%:\n\tuv run pytest -k "$*"\n\n'
         "check: lint test\n",
     )
     for relative_path, content in WRAPPER_FILES.items():

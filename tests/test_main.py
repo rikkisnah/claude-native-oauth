@@ -226,7 +226,9 @@ def test_refresh_claude_code_token_rejects_invalid_oauth_payload(credentials_pat
 
 def test_refresh_claude_code_token_rejects_missing_refresh_token(credentials_path: Path) -> None:
     """Refresh requires a stored refresh token."""
-    credentials_path.write_text(json.dumps({"claudeAiOauth": {"accessToken": "old"}}), encoding="utf-8")
+    credentials_path.write_text(
+        json.dumps({"claudeAiOauth": {"accessToken": "old"}}), encoding="utf-8"
+    )
     with pytest.raises(ValueError):
         main.refresh_claude_code_token(credentials_path)
 
@@ -446,7 +448,11 @@ def test_response_from_stream_aggregates_events() -> None:
         },
         {"type": "content_block_delta", "delta": {"text": "Hello"}},
         {"type": "content_block_delta", "delta": {"text": " world"}},
-        {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 2}},
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn"},
+            "usage": {"output_tokens": 2},
+        },
         {"type": "message_stop"},
     ]
     response = main.response_from_stream(events, "claude-sonnet-4-6")
@@ -461,7 +467,9 @@ def test_create_message_posts_expected_payload() -> None:
     """The client should send a direct POST with streaming enabled."""
     fake_response = FakeResponse(
         [
-            sse_data({"type": "message_start", "message": {"id": "m1", "role": "assistant", "usage": {}}}),
+            sse_data(
+                {"type": "message_start", "message": {"id": "m1", "role": "assistant", "usage": {}}}
+            ),
             sse_data({"type": "content_block_delta", "delta": {"text": "ok"}}),
             sse_data({"type": "message_stop"}),
         ]
@@ -482,7 +490,12 @@ def test_create_message_retries_after_401(monkeypatch: pytest.MonkeyPatch) -> No
             OneTime401Response([], should_fail=True),
             FakeResponse(
                 [
-                    sse_data({"type": "message_start", "message": {"id": "m1", "role": "assistant", "usage": {}}}),
+                    sse_data(
+                        {
+                            "type": "message_start",
+                            "message": {"id": "m1", "role": "assistant", "usage": {}},
+                        }
+                    ),
                     sse_data({"type": "content_block_delta", "delta": {"text": "ok"}}),
                     sse_data({"type": "message_stop"}),
                 ]
@@ -515,7 +528,9 @@ def test_chat_wraps_single_user_message() -> None:
     """The chat helper should wrap the prompt as a single user message."""
     fake_response = FakeResponse(
         [
-            sse_data({"type": "message_start", "message": {"id": "m1", "role": "assistant", "usage": {}}}),
+            sse_data(
+                {"type": "message_start", "message": {"id": "m1", "role": "assistant", "usage": {}}}
+            ),
             sse_data({"type": "content_block_delta", "delta": {"text": "ok"}}),
             sse_data({"type": "message_stop"}),
         ]
@@ -616,7 +631,9 @@ def test_main_json_output(monkeypatch: pytest.MonkeyPatch, credentials_path: Pat
         encoding="utf-8",
     )
 
-    def fake_chat(self: main.ClaudeNativeOAuthClient, prompt: str, config: main.ClientConfig) -> main.ClaudeResponse:
+    def fake_chat(
+        self: main.ClaudeNativeOAuthClient, prompt: str, config: main.ClientConfig
+    ) -> main.ClaudeResponse:
         assert prompt == "hello"
         return main.ClaudeResponse(
             identifier="m1",
@@ -659,7 +676,9 @@ def test_main_token_status_output(credentials_path: Path) -> None:
     stdout = io.StringIO()
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr("time.time", lambda: frozen_now)
-        exit_code = main.main(["--token-status", "--credentials-path", str(credentials_path)], stdout=stdout)
+        exit_code = main.main(
+            ["--token-status", "--credentials-path", str(credentials_path)], stdout=stdout
+        )
     assert exit_code == 0
     payload = json.loads(stdout.getvalue())
     assert payload["token_present"] is True
@@ -713,7 +732,9 @@ def test_main_plain_text_output(monkeypatch: pytest.MonkeyPatch, credentials_pat
         encoding="utf-8",
     )
 
-    def fake_chat(self: main.ClaudeNativeOAuthClient, prompt: str, config: main.ClientConfig) -> main.ClaudeResponse:
+    def fake_chat(
+        self: main.ClaudeNativeOAuthClient, prompt: str, config: main.ClientConfig
+    ) -> main.ClaudeResponse:
         assert prompt == "hello"
         return main.ClaudeResponse(
             identifier="m1",
@@ -735,7 +756,9 @@ def test_main_plain_text_output(monkeypatch: pytest.MonkeyPatch, credentials_pat
     assert stdout.getvalue() == "plain output\n"
 
 
-def test_main_repo_prompt_uses_context(monkeypatch: pytest.MonkeyPatch, credentials_path: Path, tmp_path: Path) -> None:
+def test_main_repo_prompt_uses_context(
+    monkeypatch: pytest.MonkeyPatch, credentials_path: Path, tmp_path: Path
+) -> None:
     """The CLI should augment prompts with repository context when requested."""
     credentials_path.write_text(
         json.dumps({"claudeAiOauth": {"accessToken": "token-123"}}),
@@ -745,7 +768,9 @@ def test_main_repo_prompt_uses_context(monkeypatch: pytest.MonkeyPatch, credenti
     repo.mkdir()
     (repo / "README.md").write_text("repo docs", encoding="utf-8")
 
-    def fake_chat(self: main.ClaudeNativeOAuthClient, prompt: str, config: main.ClientConfig) -> main.ClaudeResponse:
+    def fake_chat(
+        self: main.ClaudeNativeOAuthClient, prompt: str, config: main.ClientConfig
+    ) -> main.ClaudeResponse:
         assert "Summarize this repo" in prompt
         assert "repo docs" in prompt
         return main.ClaudeResponse(
