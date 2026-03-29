@@ -4,7 +4,7 @@ COV_FAIL_UNDER ?= 100
 
 .DEFAULT_GOAL := help
 
-.PHONY: help version install format lint lint-imports test check score-repo smoke-endpoint
+.PHONY: help version install format lint lint-imports test check score-repo smoke-endpoint hello
 
 help:
 	@printf '%s\n' \
@@ -18,7 +18,11 @@ help:
 		'  make test          Run pytest with 100%% coverage gating' \
 		'  make test-<expr>   Run pytest -k <expr>' \
 		'  make check         Run lint and test' \
-		'  make score-repo    Run the external architecture score wrapper'
+		'  make score-repo    Run the external architecture score wrapper' \
+		'  make hello         Send a quick hello prompt to Claude'
+
+hello:
+	$(PYTHON) main.py "Say hello"
 
 version:
 	@$(PYTHON) -c 'import main; print(main.__version__)'

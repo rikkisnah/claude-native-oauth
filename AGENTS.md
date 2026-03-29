@@ -56,18 +56,26 @@ All test validation must finish at `100%` coverage.
 
 ## Documentation Rules
 
-Documentation must be updated with every behavior change. If you change
-runtime flags, request headers, payload construction, setup steps, validation
-commands, or contributor workflow, update the relevant docs in the same change.
+Every code change must include corresponding documentation updates in the same
+commit. This is not optional — treat docs as part of the implementation, not a
+follow-up task.
 
-At minimum, review these files when making changes:
+At minimum, review and update **all** of the following when making changes:
 
-- `README.md`
-- `INSTALL.md`
-- `CREATE-PR.md`
-- `AGENTS.md` and `CLAUDE.md`
-- files under `docs/`
+- `README.md` — quick start, CLI features, examples
+- `INSTALL.md` — setup steps, verification commands
+- `CREATE-PR.md` — PR checklist and workflow
+- `AGENTS.md` and `CLAUDE.md` — contributor rules and build targets
+- `docs/User-Guide.md` — end-user usage instructions
+- `docs/How-It-Works.md` — architectural and implementation details
+- `docs/adr/` — add or update Architecture Decision Records when introducing
+  new design choices or changing existing ones
 - any local alias entry in `~/.alias` that points at this repository
+
+If a change adds, removes, or renames a Makefile target, CLI flag, dataclass,
+public function, or configuration constant, every doc file above must be
+checked and updated to reflect the new state. Do not assume a doc is
+unaffected — open it and verify.
 
 ## Commit & Pull Request Guidelines
 

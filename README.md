@@ -36,6 +36,7 @@ contract Claude Code expects:
 
 ```bash
 make install
+make hello
 uv run python main.py "Say hello in five words"
 make smoke-endpoint
 uv run python main.py --token-status
