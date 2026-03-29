@@ -20,6 +20,18 @@ contract Claude Code expects:
 - [`scripts/score_repo.py`](./scripts/score_repo.py): local wrapper around the external architecture scorecard
 - [`tests`](./tests): unit tests for request construction, stream parsing, and CLI behavior
 
+## Documentation map
+
+- [`INSTALL.md`](./INSTALL.md): a Codex-executable install and verification
+  runbook with setup requirements, local install steps, and command examples
+  for prompt execution, JSON output, streaming, token status, model selection,
+  and repository-input mode
+- [`CREATE-PR.md`](./CREATE-PR.md): a Codex-executable PR-preparation runbook
+  with validation steps, release/version expectations, and the required PR
+  checklist for this repository
+- [`AGENTS.md`](./AGENTS.md): contributor rules for testing, coverage, scoring,
+  and documentation updates
+
 ## Quick start
 
 ```bash
@@ -47,7 +59,9 @@ cno "Say hello in five words"
 `main.py` now requires a positional prompt argument for request execution. It
 does not implicitly block on stdin when no prompt is provided.
 
-For installation details, see [`INSTALL.md`](./INSTALL.md).
+For setup details, see [`INSTALL.md`](./INSTALL.md). For contribution and PR
+workflow, see [`CREATE-PR.md`](./CREATE-PR.md). Both files are written as
+actionable runbooks that Codex can execute directly.
 
 ## Disclaimer
 

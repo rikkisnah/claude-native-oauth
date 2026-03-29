@@ -1,5 +1,8 @@
 # Install
 
+This file is an executable runbook. Codex should follow it directly when asked
+to install, verify, or smoke-test this repository locally.
+
 ## Requirements
 
 - Python 3.11+
