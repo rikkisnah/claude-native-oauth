@@ -19,6 +19,7 @@ contract Claude Code expects:
 - [`Makefile`](./Makefile): `uv`-based install, lint, test, and score targets
 - [`scripts/score_repo.py`](./scripts/score_repo.py): local wrapper around the external architecture scorecard
 - [`tests`](./tests): unit tests for request construction, stream parsing, and CLI behavior
+- [`.github/workflows/ci.yml`](./.github/workflows/ci.yml): GitHub Actions CI — runs `make check` and `make score-repo` on push and PR
 
 ## Documentation map
 

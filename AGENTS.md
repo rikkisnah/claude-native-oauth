@@ -91,6 +91,13 @@ should include:
 - confirmation that the change was tested after implementation
 - confirmation that the score output remains `10.0/10`
 
+## Continuous Integration
+
+A GitHub Actions workflow at `.github/workflows/ci.yml` runs on every push to
+`main` and on every pull request targeting `main`. It executes `make check`
+(lint + 100% coverage tests) and `make score-repo` (architecture scorecard).
+All checks must pass before merging.
+
 ## Security & Configuration Tips
 
 Do not commit tokens or credential files. The client reads the Claude Code
