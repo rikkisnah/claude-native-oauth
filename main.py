@@ -18,7 +18,7 @@ from typing import Iterable, Iterator, Protocol, Sequence, TextIO
 
 import requests
 
-__version__ = "0.1.4"
+__version__ = "0.2.0"
 
 DEFAULT_CREDENTIALS_PATH = Path("~/.claude/.credentials.json").expanduser()
 DEFAULT_API_URL = "https://api.anthropic.com/v1/messages"
@@ -41,6 +41,60 @@ MODEL_ALIASES = {
     "haiku": "claude-haiku-4-5-20251001",
 }
 
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_RETRY_BASE_DELAY = 1.0
+
+
+class ClaudeAPIError(Exception):
+    """Base exception for Claude API errors."""
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class AuthenticationError(ClaudeAPIError):
+    """Raised on HTTP 401 — invalid or expired credentials."""
+
+
+class RateLimitError(ClaudeAPIError):
+    """Raised on HTTP 429 — too many requests."""
+
+
+class ServerError(ClaudeAPIError):
+    """Raised on HTTP 5xx — server-side failure."""
+
+
+class BadRequestError(ClaudeAPIError):
+    """Raised on HTTP 400 — malformed request."""
+
+
+class PermissionDeniedError(ClaudeAPIError):
+    """Raised on HTTP 403 — forbidden."""
+
+
+class NotFoundError(ClaudeAPIError):
+    """Raised on HTTP 404 — resource not found."""
+
+
+_STATUS_TO_EXCEPTION: dict[int, type[ClaudeAPIError]] = {
+    400: BadRequestError,
+    401: AuthenticationError,
+    403: PermissionDeniedError,
+    404: NotFoundError,
+    429: RateLimitError,
+}
+
+
+def _raise_api_error(status_code: int, message: str) -> None:
+    """Raise the appropriate typed exception for an HTTP status code."""
+    exc_class = _STATUS_TO_EXCEPTION.get(status_code)
+    if exc_class is not None:
+        raise exc_class(message, status_code=status_code)
+    if status_code >= 500:
+        raise ServerError(message, status_code=status_code)
+    raise ClaudeAPIError(message, status_code=status_code)
+
 
 @dataclass(frozen=True)
 class ChatMessage:
@@ -58,6 +112,10 @@ class ClientConfig:
     max_tokens: int = 1024
     temperature: float = 0.2
     system_prompt: str | None = None
+    top_p: float | None = None
+    top_k: int | None = None
+    stop_sequences: list[str] | None = None
+    metadata: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -413,7 +471,7 @@ def build_payload(
     working_directory: Path,
 ) -> dict[str, object]:
     """Build the direct Messages API payload."""
-    return {
+    payload: dict[str, object] = {
         "model": config.model,
         "messages": [asdict(message) for message in messages],
         "max_tokens": config.max_tokens,
@@ -422,6 +480,15 @@ def build_payload(
         "tools": [],
         "stream": True,
     }
+    if config.top_p is not None:
+        payload["top_p"] = config.top_p
+    if config.top_k is not None:
+        payload["top_k"] = config.top_k
+    if config.stop_sequences is not None:
+        payload["stop_sequences"] = config.stop_sequences
+    if config.metadata is not None:
+        payload["metadata"] = config.metadata
+    return payload
 
 
 def decode_sse_events(lines: Iterable[bytes]) -> Iterator[dict[str, object]]:
@@ -520,12 +587,16 @@ class ClaudeNativeOAuthClient:
         working_directory: Path | None = None,
         session: HTTPSession | None = None,
         credentials_path: Path = DEFAULT_CREDENTIALS_PATH,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        retry_base_delay: float = DEFAULT_RETRY_BASE_DELAY,
     ) -> None:
         self._auth_token = auth_token
         self._api_url = api_url
         self._working_directory = working_directory or Path.cwd()
         self._session = session or requests
         self._credentials_path = credentials_path
+        self._max_retries = max_retries
+        self._retry_base_delay = retry_base_delay
 
     def create_message(
         self,
@@ -538,23 +609,37 @@ class ClaudeNativeOAuthClient:
         return response_from_stream(events, effective_config.model)
 
     def _post(self, payload: dict[str, object]) -> HTTPResponse:
-        """POST the request payload, retrying once after token refresh on 401."""
-        response = self._session.post(
-            self._api_url, **build_request_kwargs(self._auth_token, payload)
-        )
-        try:
-            response.raise_for_status()
-            return response
-        except requests.HTTPError as exc:
-            status_code = getattr(getattr(exc, "response", None), "status_code", None)
-            if status_code != 401:
-                raise
-            self._auth_token = refresh_claude_code_token(self._credentials_path)
-            retry = self._session.post(
+        """POST the request payload with token refresh on 401 and retries on 429/5xx."""
+        refreshed = False
+        last_status: int | None = None
+
+        for attempt in range(1 + self._max_retries):
+            response = self._session.post(
                 self._api_url, **build_request_kwargs(self._auth_token, payload)
             )
-            retry.raise_for_status()
-            return retry
+            try:
+                response.raise_for_status()
+                return response
+            except requests.HTTPError as exc:
+                status_code = getattr(getattr(exc, "response", None), "status_code", None)
+                if status_code is None:
+                    raise
+
+                if status_code == 401 and not refreshed:
+                    refreshed = True
+                    self._auth_token = refresh_claude_code_token(self._credentials_path)
+                    continue
+
+                if status_code == 429 or status_code >= 500:
+                    last_status = status_code
+                    if attempt < self._max_retries:
+                        time.sleep(self._retry_base_delay * (2**attempt))
+                        continue
+
+                _raise_api_error(status_code, str(exc))
+
+        _raise_api_error(last_status or 500, "Request failed after retries")  # pragma: no cover
+        return response  # pragma: no cover
 
     def _request_events(
         self,
@@ -606,6 +691,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-tokens", type=int, default=256, help="Maximum output tokens")
     parser.add_argument("--temperature", type=float, default=0.2, help="Sampling temperature")
     parser.add_argument("--system-prompt", default=None, help="Optional system prompt override")
+    parser.add_argument("--top-p", type=float, default=None, help="Nucleus sampling threshold")
+    parser.add_argument("--top-k", type=int, default=None, help="Top-k sampling cutoff")
+    parser.add_argument(
+        "--stop-sequences", nargs="+", default=None, help="One or more stop sequences"
+    )
     parser.add_argument(
         "--repo", type=Path, default=None, help="Repository directory to read into the prompt"
     )
@@ -691,6 +781,9 @@ def main(
             max_tokens=args.max_tokens,
             temperature=args.temperature,
             system_prompt=args.system_prompt,
+            top_p=args.top_p,
+            top_k=args.top_k,
+            stop_sequences=args.stop_sequences,
         )
         token = load_fresh_claude_code_token(args.credentials_path)
         client = ClaudeNativeOAuthClient(token, credentials_path=args.credentials_path)

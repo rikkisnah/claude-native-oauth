@@ -19,8 +19,18 @@ under [`docs/`](./docs). The main entrypoints are:
 - `make lint`: run `ruff` and `mypy`
 - `make test`: run `pytest` with `100%` coverage gating
 - `make check`: run lint and tests
+- `make hello`: send a quick hello prompt to Claude
 - `make score-repo`: run the external score wrapper
 - `uv run python main.py "Say hello"`: run the client locally
+
+## Error Handling
+
+The client provides a typed exception hierarchy rooted at `ClaudeAPIError`.
+Status codes map to `BadRequestError` (400), `AuthenticationError` (401),
+`PermissionDeniedError` (403), `NotFoundError` (404), `RateLimitError` (429),
+and `ServerError` (5xx). Requests that fail with 429 or 5xx are retried up to
+3 times with exponential backoff. A 401 triggers an automatic token refresh
+without consuming a retry slot.
 
 ## Coding Style & Naming Conventions
 

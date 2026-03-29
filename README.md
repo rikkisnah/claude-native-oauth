@@ -114,6 +114,23 @@ directly without routing through the Claude binary.
 - `--list-models`: show supported model aliases
 - `--model <name>`: pick the model used for a prompt
 - `--repo <path>`: read a repository snapshot into the prompt for codebase analysis
+- `--top-p <float>`: nucleus sampling threshold
+- `--top-k <int>`: top-k sampling cutoff
+- `--stop-sequences <seq ...>`: one or more stop sequences
 
 `--token-status` prints human-readable `expires_at` and `seconds_remaining`
 values in its JSON output.
+
+## Error handling
+
+The client raises typed exceptions rooted at `ClaudeAPIError`:
+
+- `BadRequestError` (400)
+- `AuthenticationError` (401)
+- `PermissionDeniedError` (403)
+- `NotFoundError` (404)
+- `RateLimitError` (429)
+- `ServerError` (5xx)
+
+Requests that fail with 429 or 5xx are retried up to 3 times with exponential
+backoff. A 401 triggers an automatic token refresh without consuming a retry.

@@ -95,7 +95,7 @@ def test_resolve_model(alias: str, expected: str) -> None:
 
 def test_version_is_defined() -> None:
     """The module should expose a project version."""
-    assert main.__version__ == "0.1.4"
+    assert main.__version__ == "0.2.0"
 
 
 def test_get_token_status(credentials_path: Path) -> None:
@@ -519,8 +519,10 @@ def test_create_message_re_raises_non_401() -> None:
             error.response = SimpleNamespace(status_code=500)
             raise error
 
-    client = main.ClaudeNativeOAuthClient("secret", session=FakeSession(Non401Response([])))
-    with pytest.raises(requests.HTTPError):
+    client = main.ClaudeNativeOAuthClient(
+        "secret", session=FakeSession(Non401Response([])), max_retries=0
+    )
+    with pytest.raises(main.ServerError):
         client.create_message([main.ChatMessage(role="user", content="Ping")])
 
 
@@ -580,8 +582,10 @@ def test_stream_text_re_raises_non_401() -> None:
             error.response = SimpleNamespace(status_code=500)
             raise error
 
-    client = main.ClaudeNativeOAuthClient("secret", session=FakeSession(Non401Response([])))
-    with pytest.raises(requests.HTTPError):
+    client = main.ClaudeNativeOAuthClient(
+        "secret", session=FakeSession(Non401Response([])), max_retries=0
+    )
+    with pytest.raises(main.ServerError):
         list(client.stream_text("hi"))
 
 
@@ -814,3 +818,259 @@ def test_main_requires_prompt_argument() -> None:
     exit_code = main.main([], stderr=stderr)
     assert exit_code == 1
     assert "prompt argument is required" in stderr.getvalue()
+
+
+# --- Error hierarchy tests ---
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_class"),
+    [
+        (400, main.BadRequestError),
+        (401, main.AuthenticationError),
+        (403, main.PermissionDeniedError),
+        (404, main.NotFoundError),
+        (429, main.RateLimitError),
+        (500, main.ServerError),
+        (502, main.ServerError),
+        (418, main.ClaudeAPIError),
+    ],
+)
+def test_raise_api_error(status_code: int, expected_class: type[main.ClaudeAPIError]) -> None:
+    """_raise_api_error should map status codes to typed exceptions."""
+    with pytest.raises(expected_class) as exc_info:
+        main._raise_api_error(status_code, f"HTTP {status_code}")
+    assert exc_info.value.status_code == status_code
+
+
+def test_exception_hierarchy() -> None:
+    """All API exception subclasses should inherit from ClaudeAPIError."""
+    for cls in (
+        main.AuthenticationError,
+        main.RateLimitError,
+        main.ServerError,
+        main.BadRequestError,
+        main.PermissionDeniedError,
+        main.NotFoundError,
+    ):
+        assert issubclass(cls, main.ClaudeAPIError)
+
+
+# --- ClientConfig new fields tests ---
+
+
+def test_client_config_new_fields_default_none() -> None:
+    """New optional fields should default to None."""
+    config = main.ClientConfig()
+    assert config.top_p is None
+    assert config.top_k is None
+    assert config.stop_sequences is None
+    assert config.metadata is None
+
+
+def test_build_payload_includes_top_p() -> None:
+    """Payload should include top_p when set."""
+    config = main.ClientConfig(top_p=0.9)
+    payload = main.build_payload([main.ChatMessage("user", "hi")], config, Path("/tmp"))
+    assert payload["top_p"] == 0.9
+
+
+def test_build_payload_includes_top_k() -> None:
+    """Payload should include top_k when set."""
+    config = main.ClientConfig(top_k=40)
+    payload = main.build_payload([main.ChatMessage("user", "hi")], config, Path("/tmp"))
+    assert payload["top_k"] == 40
+
+
+def test_build_payload_includes_stop_sequences() -> None:
+    """Payload should include stop_sequences when set."""
+    config = main.ClientConfig(stop_sequences=["STOP", "\n"])
+    payload = main.build_payload([main.ChatMessage("user", "hi")], config, Path("/tmp"))
+    assert payload["stop_sequences"] == ["STOP", "\n"]
+
+
+def test_build_payload_includes_metadata() -> None:
+    """Payload should include metadata when set."""
+    config = main.ClientConfig(metadata={"user_id": "abc"})
+    payload = main.build_payload([main.ChatMessage("user", "hi")], config, Path("/tmp"))
+    assert payload["metadata"] == {"user_id": "abc"}
+
+
+def test_build_payload_omits_none_fields() -> None:
+    """Payload should not include optional fields when they are None."""
+    config = main.ClientConfig()
+    payload = main.build_payload([main.ChatMessage("user", "hi")], config, Path("/tmp"))
+    assert "top_p" not in payload
+    assert "top_k" not in payload
+    assert "stop_sequences" not in payload
+    assert "metadata" not in payload
+
+
+# --- CLI flag tests ---
+
+
+def test_parse_args_top_p_flag() -> None:
+    """The --top-p flag should parse a float value."""
+    args = main.parse_args(["--top-p", "0.9", "hello"])
+    assert args.top_p == 0.9
+
+
+def test_parse_args_top_k_flag() -> None:
+    """The --top-k flag should parse an int value."""
+    args = main.parse_args(["--top-k", "40", "hello"])
+    assert args.top_k == 40
+
+
+def test_parse_args_stop_sequences_flag() -> None:
+    """The --stop-sequences flag should accept multiple values."""
+    args = main.parse_args(["hello", "--stop-sequences", "STOP", "\\n"])
+    assert args.stop_sequences == ["STOP", "\\n"]
+
+
+def test_parse_args_defaults_none_for_new_flags() -> None:
+    """New sampling flags should default to None."""
+    args = main.parse_args(["hello"])
+    assert args.top_p is None
+    assert args.top_k is None
+    assert args.stop_sequences is None
+
+
+# --- Retry tests ---
+
+
+class StatusCodeResponse(FakeResponse):
+    """Response stub that raises HTTPError with a specific status code."""
+
+    def __init__(self, status_code: int, lines: list[bytes] | None = None) -> None:
+        super().__init__(lines or [])
+        self._status_code = status_code
+
+    def raise_for_status(self) -> None:
+        error = requests.HTTPError(f"HTTP {self._status_code}")
+        error.response = SimpleNamespace(status_code=self._status_code)
+        raise error
+
+
+def test_post_re_raises_http_error_without_response() -> None:
+    """HTTPError with no .response attribute should propagate directly."""
+
+    class NoResponseError(FakeResponse):
+        def raise_for_status(self) -> None:
+            raise requests.HTTPError("connection failed")
+
+    client = main.ClaudeNativeOAuthClient(
+        "secret", session=FakeSession(NoResponseError([])), max_retries=0
+    )
+    with pytest.raises(requests.HTTPError, match="connection failed"):
+        client.create_message([main.ChatMessage(role="user", content="hi")])
+
+
+def test_post_retries_on_429_with_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The client should retry with exponential backoff on 429."""
+    sleeps: list[float] = []
+    monkeypatch.setattr("main.time.sleep", lambda s: sleeps.append(s))
+    ok_response = FakeResponse(
+        [
+            sse_data(
+                {"type": "message_start", "message": {"id": "m1", "role": "assistant", "usage": {}}}
+            ),
+            sse_data({"type": "content_block_delta", "delta": {"text": "ok"}}),
+            sse_data({"type": "message_stop"}),
+        ]
+    )
+    session = SequencedSession(
+        [StatusCodeResponse(429), StatusCodeResponse(429), ok_response]
+    )
+    client = main.ClaudeNativeOAuthClient("secret", session=session, max_retries=3)
+    response = client.create_message([main.ChatMessage(role="user", content="hi")])
+    assert response.text == "ok"
+    assert len(session.calls) == 3
+    assert sleeps == [1.0, 2.0]
+
+
+def test_post_retries_on_500_with_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The client should retry with exponential backoff on 500."""
+    sleeps: list[float] = []
+    monkeypatch.setattr("main.time.sleep", lambda s: sleeps.append(s))
+    ok_response = FakeResponse(
+        [
+            sse_data(
+                {"type": "message_start", "message": {"id": "m1", "role": "assistant", "usage": {}}}
+            ),
+            sse_data({"type": "content_block_delta", "delta": {"text": "ok"}}),
+            sse_data({"type": "message_stop"}),
+        ]
+    )
+    session = SequencedSession([StatusCodeResponse(500), ok_response])
+    client = main.ClaudeNativeOAuthClient("secret", session=session, max_retries=3)
+    response = client.create_message([main.ChatMessage(role="user", content="hi")])
+    assert response.text == "ok"
+    assert sleeps == [1.0]
+
+
+def test_post_raises_after_max_retries_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The client should raise after exhausting retries on 429."""
+    monkeypatch.setattr("main.time.sleep", lambda s: None)
+    session = SequencedSession(
+        [StatusCodeResponse(429), StatusCodeResponse(429), StatusCodeResponse(429)]
+    )
+    client = main.ClaudeNativeOAuthClient("secret", session=session, max_retries=2)
+    with pytest.raises(main.RateLimitError):
+        client.create_message([main.ChatMessage(role="user", content="hi")])
+
+
+def test_post_no_retry_on_400() -> None:
+    """A 400 error should raise immediately without retrying."""
+    session = FakeSession(StatusCodeResponse(400))
+    client = main.ClaudeNativeOAuthClient("secret", session=session, max_retries=3)
+    with pytest.raises(main.BadRequestError):
+        client.create_message([main.ChatMessage(role="user", content="hi")])
+    assert len(session.calls) == 1
+
+
+def test_post_max_retries_zero_disables_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Setting max_retries=0 should disable retry behavior."""
+    monkeypatch.setattr("main.time.sleep", lambda s: None)
+    session = FakeSession(StatusCodeResponse(429))
+    client = main.ClaudeNativeOAuthClient("secret", session=session, max_retries=0)
+    with pytest.raises(main.RateLimitError):
+        client.create_message([main.ChatMessage(role="user", content="hi")])
+    assert len(session.calls) == 1
+
+
+def test_post_401_refresh_separate_from_retry_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 401 token refresh should not consume a retry slot."""
+    sleeps: list[float] = []
+    monkeypatch.setattr("main.time.sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(main, "refresh_claude_code_token", lambda path: "fresh-token")
+    ok_response = FakeResponse(
+        [
+            sse_data(
+                {"type": "message_start", "message": {"id": "m1", "role": "assistant", "usage": {}}}
+            ),
+            sse_data({"type": "content_block_delta", "delta": {"text": "ok"}}),
+            sse_data({"type": "message_stop"}),
+        ]
+    )
+    session = SequencedSession(
+        [
+            StatusCodeResponse(401),
+            StatusCodeResponse(429),
+            ok_response,
+        ]
+    )
+    client = main.ClaudeNativeOAuthClient("secret", session=session, max_retries=2)
+    response = client.create_message([main.ChatMessage(role="user", content="hi")])
+    assert response.text == "ok"
+    assert len(session.calls) == 3
+
+
+def test_post_retries_exhausted_on_5xx(monkeypatch: pytest.MonkeyPatch) -> None:
+    """All retries consumed on 5xx should raise ServerError."""
+    monkeypatch.setattr("main.time.sleep", lambda s: None)
+    session = SequencedSession(
+        [StatusCodeResponse(503), StatusCodeResponse(503), StatusCodeResponse(503)]
+    )
+    client = main.ClaudeNativeOAuthClient("secret", session=session, max_retries=2)
+    with pytest.raises(main.ServerError):
+        client.create_message([main.ChatMessage(role="user", content="hi")])

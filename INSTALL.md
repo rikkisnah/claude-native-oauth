@@ -53,6 +53,14 @@ uv run python main.py --list-models
 uv run python main.py --model opus "Explain the tradeoffs."
 ```
 
+## Sampling parameters
+
+```bash
+uv run python main.py --top-p 0.95 "Explain quantum computing."
+uv run python main.py --top-k 40 "List three facts."
+uv run python main.py --stop-sequences DONE "Write until done."
+```
+
 ## Read a repository into the prompt
 
 ```bash
