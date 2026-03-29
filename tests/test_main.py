@@ -95,7 +95,7 @@ def test_resolve_model(alias: str, expected: str) -> None:
 
 def test_version_is_defined() -> None:
     """The module should expose a project version."""
-    assert main.__version__ == "0.1.0"
+    assert main.__version__ == "0.1.1"
 
 
 def test_get_token_status(credentials_path: Path) -> None:

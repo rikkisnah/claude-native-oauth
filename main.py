@@ -18,7 +18,7 @@ from typing import Iterable, Iterator, Protocol, Sequence, TextIO
 
 import requests
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 DEFAULT_CREDENTIALS_PATH = Path("~/.claude/.credentials.json").expanduser()
 DEFAULT_API_URL = "https://api.anthropic.com/v1/messages"

@@ -65,38 +65,39 @@ actionable runbooks that Codex can execute directly.
 
 ## Disclaimer
 
+> **This project likely violates Anthropic's Terms of Service and Acceptable
+> Use Policy. Do not use, publish, or distribute it without reviewing those
+> terms yourself.**
+
 This repository is experimental code. It demonstrates a direct request flow
 that reuses Claude Code OAuth credentials and request conventions outside of
 Claude Code itself. Treat it as a research artifact, not a sanctioned
 integration path.
 
-Likely concerns include:
+### Policy concerns
 
-- OAuth token misuse: the token in `~/.claude/.credentials.json` is issued for
-  Claude Code's own use. Extracting it and making raw HTTP calls outside of
-  Claude Code is likely not an authorized use of that credential.
-- Spoofed billing headers: the code sends
-  `x-anthropic-billing-header: cc_version=2.1.81; cc_entrypoint=cli; cch=a9fc8;`,
-  which makes Anthropic's backend think the request is coming from Claude Code
-  itself.
-- Unauthorized beta flags: headers such as `claude-code-20250219` and
-  `oauth-2025-04-20` appear to be internal beta features gated to Claude Code.
-- Safety guardrail bypass: the code sets
-  `anthropic-dangerous-direct-browser-access: true`, which appears intended for
-  specific approved contexts rather than arbitrary third-party scripts.
+| Concern | Severity | Detail |
+|---|---|---|
+| OAuth credential extraction | **High** | The token in `~/.claude/.credentials.json` is issued for Claude Code's own use. Extracting it and making raw HTTP calls outside of Claude Code is not an authorized use of that credential. |
+| Billing header spoofing | **High** | The code sends `x-anthropic-billing-header: cc_version=2.1.81; cc_entrypoint=cli; cch=a9fc8;`, which makes Anthropic's backend attribute the request to Claude Code itself. |
+| User-Agent impersonation | **High** | Requests use `User-Agent: claude-code/2.1.81` and `x-app: cli`, impersonating the official Claude Code client. |
+| Token refresh via internal OAuth flow | **High** | The code refreshes tokens using Claude Code's OAuth client ID and scopes, extending unauthorized access beyond the original token lifetime. |
+| Unauthorized beta flags | **Medium** | Headers such as `claude-code-20250219` and `oauth-2025-04-20` are internal beta features gated to Claude Code. |
+| Safety header bypass | **Medium** | The code sets `anthropic-dangerous-direct-browser-access: true`, which is intended for specific approved contexts, not arbitrary third-party scripts. |
 
-The core issue is that this client can look like it is impersonating Claude
-Code to gain API access without using a separate API key. A Claude Pro or Max
-subscription gives access to Claude Code, but it does not necessarily authorize
-extracting its credentials and building an independent client on top of that
-auth flow.
+### Core issue
+
+This client impersonates Claude Code to gain API access without a separate API
+key. A Claude Pro or Max subscription gives access to Claude Code, but it does
+not authorize extracting its credentials and building an independent client on
+top of that auth flow.
+
+### Recommended alternative
 
 If you want supported programmatic access to Claude, use an Anthropic API key
-from `console.anthropic.com` and the official Anthropic SDK instead.
-
-Use or distribution of this code may violate Anthropic's Terms of Service or
-Acceptable Use Policy. Review those terms yourself before using, sharing, or
-publishing this project.
+from [console.anthropic.com](https://console.anthropic.com) and the official
+[Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python)
+instead.
 
 ## Why this exists
 

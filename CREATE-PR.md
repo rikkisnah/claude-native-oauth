@@ -1,8 +1,9 @@
 # Create PR
 
 This file is a command runbook. It should show the exact commands to run for PR
-preparation, but it should not assume Codex will create the commit on your
-behalf unless you explicitly ask for that.
+preparation, including the `git add ...` and `git commit ...` commands, but it
+should not assume Codex will execute those commands on your behalf unless you
+explicitly ask for that.
 
 ## Before opening a PR
 
@@ -35,8 +36,12 @@ update the version before staging and committing.
 
 ## Stage files
 
-Run a `git add ...` command for the files that belong to the change before
-committing.
+Show a `git add ...` command for the files that belong to the change before
+committing so the user can run it manually.
+
+Do not stop after asking the version question. After the user answers, always
+provide the exact `git add ...` command that stages the changed files for this
+branch.
 
 ```bash
 git add main.py tests README.md INSTALL.md CREATE-PR.md AGENTS.md Makefile pyproject.toml .gitignore
@@ -44,23 +49,36 @@ git add main.py tests README.md INSTALL.md CREATE-PR.md AGENTS.md Makefile pypro
 
 Use a narrower `git add ...` command when the change touches fewer files.
 
+For a docs-only change in this file, that means showing:
+
+```bash
+git add CREATE-PR.md
+```
+
 ## Commit commands
 
-Use a short imperative subject. Copy and run a one-line commit command like:
+Use a short imperative subject. Always give the user the exact commit command
+to run manually. A one-line commit command looks like:
 
 ```bash
 git commit -m "Tighten README disclaimer"
 ```
 
-When details matter, copy and run a subject-plus-body command like:
+When details matter, provide a subject-plus-body command like:
 
 ```bash
 git commit -m "Tighten README disclaimer" -m "Clarify that the repository is experimental code." -m "Document the likely OAuth, billing-header, beta-flag, and policy risks."
 ```
 
 Do not create the commit automatically when following this file unless the user
-explicitly asks for execution. The default expectation is to present the
-commands for the user to run.
+explicitly asks for execution. The default expectation is to present the exact
+commands for the user to run manually.
+
+After the version answer is known, present the commands in this order:
+
+1. `git add ...`
+2. `git commit ...`
+3. the suggested PR title and PR body
 
 ## PR checklist
 
