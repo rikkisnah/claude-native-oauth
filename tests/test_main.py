@@ -95,7 +95,7 @@ def test_resolve_model(alias: str, expected: str) -> None:
 
 def test_version_is_defined() -> None:
     """The module should expose a project version."""
-    assert main.__version__ == "0.1.1"
+    assert main.__version__ == "0.1.4"
 
 
 def test_get_token_status(credentials_path: Path) -> None:
@@ -119,6 +119,20 @@ def test_get_token_status(credentials_path: Path) -> None:
     assert status.is_expired is False
     assert status.should_refresh is True
     assert status.subscription_type == "max"
+
+
+def test_format_epoch_millis() -> None:
+    """Epoch-millisecond timestamps should render as readable UTC strings."""
+    assert main.format_epoch_millis(1_774_798_708_084) == "2026-03-29 15:38:28 UTC"
+    assert main.format_epoch_millis(None) is None
+
+
+def test_format_seconds_remaining() -> None:
+    """Remaining seconds should render as readable durations."""
+    assert main.format_seconds_remaining(24_785.41) == "6h 53m 5s"
+    assert main.format_seconds_remaining(90_061) == "1d 1h 1m 1s"
+    assert main.format_seconds_remaining(-61.2) == "-1m 1s"
+    assert main.format_seconds_remaining(None) is None
 
 
 def test_get_token_status_rejects_invalid_oauth_payload(credentials_path: Path) -> None:
@@ -628,14 +642,31 @@ def test_main_json_output(monkeypatch: pytest.MonkeyPatch, credentials_path: Pat
 
 def test_main_token_status_output(credentials_path: Path) -> None:
     """The CLI should print token status and exit."""
+    expires_at = 1_774_798_708_084
+    frozen_now = (expires_at - 24_785.41 * 1000) / 1000
     credentials_path.write_text(
-        json.dumps({"claudeAiOauth": {"accessToken": "token-123", "refreshToken": "refresh-123"}}),
+        json.dumps(
+            {
+                "claudeAiOauth": {
+                    "accessToken": "token-123",
+                    "refreshToken": "refresh-123",
+                    "expiresAt": expires_at,
+                }
+            }
+        ),
         encoding="utf-8",
     )
     stdout = io.StringIO()
-    exit_code = main.main(["--token-status", "--credentials-path", str(credentials_path)], stdout=stdout)
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr("time.time", lambda: frozen_now)
+        exit_code = main.main(["--token-status", "--credentials-path", str(credentials_path)], stdout=stdout)
     assert exit_code == 0
-    assert json.loads(stdout.getvalue())["token_present"] is True
+    payload = json.loads(stdout.getvalue())
+    assert payload["token_present"] is True
+    assert payload["expires_at"] == "2026-03-29 15:38:28 UTC"
+    assert payload["seconds_remaining"] == "6h 53m 5s"
+    assert "expires_at_epoch_ms" not in payload
+    assert "seconds_remaining_raw" not in payload
 
 
 def test_main_list_models_output() -> None:

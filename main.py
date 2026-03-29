@@ -18,7 +18,7 @@ from typing import Iterable, Iterator, Protocol, Sequence, TextIO
 
 import requests
 
-__version__ = "0.1.1"
+__version__ = "0.1.4"
 
 DEFAULT_CREDENTIALS_PATH = Path("~/.claude/.credentials.json").expanduser()
 DEFAULT_API_URL = "https://api.anthropic.com/v1/messages"
@@ -182,6 +182,33 @@ def get_token_status(credentials_path: Path = DEFAULT_CREDENTIALS_PATH) -> Token
         should_refresh=should_refresh,
         subscription_type=oauth.get("subscriptionType") if isinstance(oauth.get("subscriptionType"), str) else None,
     )
+
+
+def format_epoch_millis(epoch_millis: int | None) -> str | None:
+    """Render epoch milliseconds as a human-friendly UTC timestamp."""
+    if epoch_millis is None:
+        return None
+    return datetime.fromtimestamp(epoch_millis / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def format_seconds_remaining(seconds: float | None) -> str | None:
+    """Render a remaining-duration value as a human-friendly string."""
+    if seconds is None:
+        return None
+    total_seconds = int(abs(seconds))
+    days, remainder = divmod(total_seconds, 86_400)
+    hours, remainder = divmod(remainder, 3_600)
+    minutes, secs = divmod(remainder, 60)
+    parts: list[str] = []
+    if days:
+        parts.append(f"{days}d")
+    if hours or days:
+        parts.append(f"{hours}h")
+    if minutes or hours or days:
+        parts.append(f"{minutes}m")
+    parts.append(f"{secs}s")
+    formatted = " ".join(parts)
+    return f"-{formatted}" if seconds < 0 else formatted
 
 
 def refresh_claude_code_token(credentials_path: Path = DEFAULT_CREDENTIALS_PATH) -> str:
@@ -579,7 +606,10 @@ def read_prompt(args: argparse.Namespace, stdin: TextIO) -> str:
 def handle_token_status(args: argparse.Namespace, stdout: TextIO) -> int:
     """Print token status and exit."""
     status = get_token_status(args.credentials_path)
-    stdout.write(json.dumps(asdict(status), indent=2))
+    payload = asdict(status)
+    payload["expires_at"] = format_epoch_millis(status.expires_at)
+    payload["seconds_remaining"] = format_seconds_remaining(status.seconds_remaining)
+    stdout.write(json.dumps(payload, indent=2))
     stdout.write("\n")
     return 0
 

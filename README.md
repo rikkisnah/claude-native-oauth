@@ -112,3 +112,6 @@ directly without routing through the Claude binary.
 - `--list-models`: show supported model aliases
 - `--model <name>`: pick the model used for a prompt
 - `--repo <path>`: read a repository snapshot into the prompt for codebase analysis
+
+`--token-status` prints human-readable `expires_at` and `seconds_remaining`
+values in its JSON output.

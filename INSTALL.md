@@ -43,6 +43,9 @@ uv run python main.py --stream "Explain direct OAuth message streaming."
 uv run python main.py --token-status
 ```
 
+The status output prints `expires_at` as a human-readable UTC timestamp and
+`seconds_remaining` as a readable duration.
+
 ## Supported models
 
 ```bash
