@@ -1,0 +1,91 @@
+# Repository Guidelines
+
+## Project Structure & Module Organization
+
+The production implementation lives in [`main.py`](./main.py). Keep the direct
+Claude OAuth request path there. Tests live under [`tests/`](./tests), repo
+automation helpers under [`scripts/`](./scripts), and contributor/runtime docs
+under [`docs/`](./docs). The main entrypoints are:
+
+- `main.py`: direct `POST /v1/messages?beta=true` client and CLI
+- `scripts/score_repo.py`: wrapper for the external architecture scorecard
+- `Makefile`: standard developer commands
+- `~/.alias`: local shell shortcuts; keep the `cno` alias aligned with this repo
+
+## Build, Test, and Development Commands
+
+- `make`: show available targets
+- `make install`: sync the `uv` environment with dev dependencies
+- `make lint`: run `ruff` and `mypy`
+- `make test`: run `pytest` with `100%` coverage gating
+- `make check`: run lint and tests
+- `make score-repo`: run the external score wrapper
+- `uv run python main.py "Say hello"`: run the client locally
+
+## Coding Style & Naming Conventions
+
+Use 4-space indentation and Python 3.11+ syntax. Prefer explicit types and
+small dataclasses for structured values. Keep production logic in `main.py`
+rather than moving core request behavior into helper packages. Use:
+
+- `snake_case` for functions and variables
+- `PascalCase` for dataclasses and client types
+- short module docstrings at the top of each file
+
+Formatting and static analysis are enforced with `ruff` and `mypy`.
+All code paths and repository-facing behavior should be documented when they
+change.
+
+## Testing Guidelines
+
+Tests use `pytest` and must keep total coverage at `100%`. Name files
+`test_*.py` and keep test names descriptive, for example
+`test_build_headers()` or `test_main_stream_output()`. Cover any changes to:
+
+- request headers
+- system blocks
+- SSE parsing
+- CLI flags and output modes
+
+Run `make test` before opening a PR. Do not merge changes that reduce coverage
+below `100%`.
+Every code change must be followed by an appropriate test run. At minimum, run
+the narrowest command that validates the change, and run `make check` for any
+meaningful behavior change.
+All test validation must finish at `100%` coverage.
+
+## Documentation Rules
+
+Documentation must be updated with every behavior change. If you change
+runtime flags, request headers, payload construction, setup steps, validation
+commands, or contributor workflow, update the relevant docs in the same change.
+
+At minimum, review these files when making changes:
+
+- `README.md`
+- `INSTALL.md`
+- `CREATE-PR.md`
+- `AGENTS.md` and `CLAUDE.md`
+- files under `docs/`
+- any local alias entry in `~/.alias` that points at this repository
+
+## Commit & Pull Request Guidelines
+
+The repository is still new, so use short imperative commit messages such as
+`Add JSON output test` or `Tighten OAuth payload validation`. Pull requests
+should include:
+
+- a brief summary of the change
+- validation results from `make check` and `make score-repo`
+- notes on any changes to the OAuth request contract
+- confirmation that documentation was updated
+- confirmation that test coverage remains at `100%`
+- confirmation that the change was tested after implementation
+- confirmation that the score output remains `10.0/10`
+
+## Security & Configuration Tips
+
+Do not commit tokens or credential files. The client reads the Claude Code
+OAuth token from `~/.claude/.credentials.json`. Treat the billing header,
+OAuth headers, and direct API contract as production behavior, not incidental
+implementation details.
