@@ -15,9 +15,9 @@ uv run python main.py --repo /path/to/repo "Summarize this repository."
 
 Aliases:
 
-- `sonnet`
-- `opus`
-- `haiku`
+- `sonnet` resolves to `claude-sonnet-4-6`
+- `opus` resolves to `claude-opus-4-7`
+- `haiku` resolves to `claude-haiku-4-5-20251001`
 
 You can also pass a full Anthropic model identifier with `--model`.
 
@@ -30,6 +30,8 @@ uv run python main.py --stop-sequences DONE END "Write until stopped."
 ```
 
 These flags are optional and omitted from the API payload when not provided.
+The CLI rejects `--temperature`, `--top-p`, and `--top-k` for `--model opus`
+because Opus 4.7 does not accept those sampling parameters.
 
 ## Scorecard
 

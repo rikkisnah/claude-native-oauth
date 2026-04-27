@@ -6,12 +6,19 @@
 
 1. Read the Claude Code OAuth token from `~/.claude/.credentials.json`
 2. Resolve the model alias if needed
-3. Build Claude Code-compatible headers
-4. Build the `system` block list, including the billing marker
-5. Optionally include `top_p`, `top_k`, `stop_sequences`, and `metadata` in
-   the payload when configured
-6. `POST` to `https://api.anthropic.com/v1/messages?beta=true`
-7. Parse server-sent events into a normalized response object
+3. Validate model-specific payload constraints, including Opus 4.7 sampling
+   parameter restrictions
+4. Build Claude Code-compatible headers
+5. Build the `system` block list, including the billing marker
+6. Optionally include `temperature`, `top_p`, `top_k`, `stop_sequences`, and
+   `metadata` in the payload when configured
+7. `POST` to `https://api.anthropic.com/v1/messages?beta=true`
+8. Parse server-sent events into a normalized response object
+
+Model aliases are static constants in `main.py`: `sonnet` maps to
+`claude-sonnet-4-6`, `opus` maps to `claude-opus-4-7`, and `haiku` maps to
+`claude-haiku-4-5-20251001`. Run `uv run python main.py --list-models` to
+inspect the active alias table in this checkout.
 
 ## Repository-local scoring
 

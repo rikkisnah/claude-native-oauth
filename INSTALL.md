@@ -54,6 +54,11 @@ uv run python main.py --list-models
 uv run python main.py --model opus "Explain the tradeoffs."
 ```
 
+The built-in aliases resolve to `claude-sonnet-4-6`, `claude-opus-4-7`, and
+`claude-haiku-4-5-20251001`. Sampling parameters are optional. Do not combine
+`--model opus` with `--temperature`, `--top-p`, or `--top-k`; the CLI rejects
+those parameters locally for Opus 4.7.
+
 ## Sampling parameters
 
 ```bash

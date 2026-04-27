@@ -18,7 +18,7 @@ from typing import Iterable, Iterator, Protocol, Sequence, TextIO
 
 import requests
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 DEFAULT_CREDENTIALS_PATH = Path("~/.claude/.credentials.json").expanduser()
 DEFAULT_API_URL = "https://api.anthropic.com/v1/messages"
@@ -37,9 +37,10 @@ DEFAULT_REPO_MAX_BYTES = 120_000
 
 MODEL_ALIASES = {
     "sonnet": "claude-sonnet-4-6",
-    "opus": "claude-opus-4-6",
+    "opus": "claude-opus-4-7",
     "haiku": "claude-haiku-4-5-20251001",
 }
+MODELS_WITHOUT_SAMPLING_PARAMETERS = {"claude-opus-4-7"}
 
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_RETRY_BASE_DELAY = 1.0
@@ -110,7 +111,7 @@ class ClientConfig:
 
     model: str = DEFAULT_MODEL
     max_tokens: int = 1024
-    temperature: float = 0.2
+    temperature: float | None = None
     system_prompt: str | None = None
     top_p: float | None = None
     top_k: int | None = None
@@ -203,6 +204,24 @@ def save_credentials(
 def resolve_model(model: str) -> str:
     """Resolve a model alias to a full Anthropic model identifier."""
     return MODEL_ALIASES.get(model, model)
+
+
+def validate_sampling_parameters(config: ClientConfig) -> None:
+    """Reject sampling parameters for models that do not accept them."""
+    if config.model not in MODELS_WITHOUT_SAMPLING_PARAMETERS:
+        return
+    unsupported = [
+        name
+        for name, value in (
+            ("temperature", config.temperature),
+            ("top_p", config.top_p),
+            ("top_k", config.top_k),
+        )
+        if value is not None
+    ]
+    if unsupported:
+        parameters = ", ".join(unsupported)
+        raise ValueError(f"{config.model} does not support sampling parameters: {parameters}")
 
 
 def load_claude_code_token(credentials_path: Path = DEFAULT_CREDENTIALS_PATH) -> str:
@@ -471,15 +490,17 @@ def build_payload(
     working_directory: Path,
 ) -> dict[str, object]:
     """Build the direct Messages API payload."""
+    validate_sampling_parameters(config)
     payload: dict[str, object] = {
         "model": config.model,
         "messages": [asdict(message) for message in messages],
         "max_tokens": config.max_tokens,
-        "temperature": config.temperature,
         "system": build_system_blocks(config, working_directory),
         "tools": [],
         "stream": True,
     }
+    if config.temperature is not None:
+        payload["temperature"] = config.temperature
     if config.top_p is not None:
         payload["top_p"] = config.top_p
     if config.top_k is not None:
@@ -689,7 +710,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("prompt", nargs="?", help="Prompt text.")
     parser.add_argument("--model", default="sonnet", help="Model alias or full model id")
     parser.add_argument("--max-tokens", type=int, default=256, help="Maximum output tokens")
-    parser.add_argument("--temperature", type=float, default=0.2, help="Sampling temperature")
+    parser.add_argument("--temperature", type=float, default=None, help="Sampling temperature")
     parser.add_argument("--system-prompt", default=None, help="Optional system prompt override")
     parser.add_argument("--top-p", type=float, default=None, help="Nucleus sampling threshold")
     parser.add_argument("--top-k", type=int, default=None, help="Top-k sampling cutoff")
@@ -785,6 +806,7 @@ def main(
             top_k=args.top_k,
             stop_sequences=args.stop_sequences,
         )
+        validate_sampling_parameters(config)
         token = load_fresh_claude_code_token(args.credentials_path)
         client = ClaudeNativeOAuthClient(token, credentials_path=args.credentials_path)
         if args.stream:

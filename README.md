@@ -124,6 +124,12 @@ paths outside this repository.
 - `--top-k <int>`: top-k sampling cutoff
 - `--stop-sequences <seq ...>`: one or more stop sequences
 
+Current model aliases are `sonnet` (`claude-sonnet-4-6`), `opus`
+(`claude-opus-4-7`), and `haiku` (`claude-haiku-4-5-20251001`). Sampling
+parameters are omitted unless explicitly provided. The client rejects
+`temperature`, `top_p`, and `top_k` for `claude-opus-4-7`, which does not
+accept those sampling parameters.
+
 `--token-status` prints human-readable `expires_at` and `seconds_remaining`
 values in its JSON output.
 

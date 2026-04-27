@@ -86,7 +86,7 @@ class SequencedSession:
 
 @pytest.mark.parametrize(
     ("alias", "expected"),
-    [("sonnet", "claude-sonnet-4-6"), ("opus", "claude-opus-4-6"), ("custom", "custom")],
+    [("sonnet", "claude-sonnet-4-6"), ("opus", "claude-opus-4-7"), ("custom", "custom")],
 )
 def test_resolve_model(alias: str, expected: str) -> None:
     """Model aliases should resolve predictably."""
@@ -95,7 +95,7 @@ def test_resolve_model(alias: str, expected: str) -> None:
 
 def test_version_is_defined() -> None:
     """The module should expose a project version."""
-    assert main.__version__ == "0.2.1"
+    assert main.__version__ == "0.2.2"
 
 
 def test_get_token_status(credentials_path: Path) -> None:
@@ -190,6 +190,7 @@ def test_build_headers() -> None:
 def test_supported_models() -> None:
     """Supported model listing should include the known aliases."""
     assert ("sonnet", "claude-sonnet-4-6") in main.supported_models()
+    assert ("opus", "claude-opus-4-7") in main.supported_models()
 
 
 def test_refresh_claude_code_token_updates_credentials(
@@ -700,6 +701,7 @@ def test_main_list_models_output() -> None:
     payload = json.loads(stdout.getvalue())
     assert payload["default"] == "claude-sonnet-4-6"
     assert any(item["alias"] == "sonnet" for item in payload["aliases"])
+    assert {"alias": "opus", "model": "claude-opus-4-7"} in payload["aliases"]
 
 
 def test_main_stream_output(monkeypatch: pytest.MonkeyPatch, credentials_path: Path) -> None:
@@ -862,10 +864,25 @@ def test_exception_hierarchy() -> None:
 def test_client_config_new_fields_default_none() -> None:
     """New optional fields should default to None."""
     config = main.ClientConfig()
+    assert config.temperature is None
     assert config.top_p is None
     assert config.top_k is None
     assert config.stop_sequences is None
     assert config.metadata is None
+
+
+def test_build_payload_omits_temperature_by_default() -> None:
+    """Payload should omit temperature unless explicitly configured."""
+    config = main.ClientConfig()
+    payload = main.build_payload([main.ChatMessage("user", "hi")], config, Path("/tmp"))
+    assert "temperature" not in payload
+
+
+def test_build_payload_includes_temperature_when_set() -> None:
+    """Payload should include temperature when set."""
+    config = main.ClientConfig(temperature=0.2)
+    payload = main.build_payload([main.ChatMessage("user", "hi")], config, Path("/tmp"))
+    assert payload["temperature"] == 0.2
 
 
 def test_build_payload_includes_top_p() -> None:
@@ -900,10 +917,25 @@ def test_build_payload_omits_none_fields() -> None:
     """Payload should not include optional fields when they are None."""
     config = main.ClientConfig()
     payload = main.build_payload([main.ChatMessage("user", "hi")], config, Path("/tmp"))
+    assert "temperature" not in payload
     assert "top_p" not in payload
     assert "top_k" not in payload
     assert "stop_sequences" not in payload
     assert "metadata" not in payload
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        main.ClientConfig(model="claude-opus-4-7", temperature=0.2),
+        main.ClientConfig(model="claude-opus-4-7", top_p=0.9),
+        main.ClientConfig(model="claude-opus-4-7", top_k=40),
+    ],
+)
+def test_build_payload_rejects_sampling_for_opus_4_7(config: main.ClientConfig) -> None:
+    """Opus 4.7 should reject sampling parameters locally."""
+    with pytest.raises(ValueError, match="does not support sampling parameters"):
+        main.build_payload([main.ChatMessage("user", "hi")], config, Path("/tmp"))
 
 
 # --- CLI flag tests ---
@@ -930,6 +962,7 @@ def test_parse_args_stop_sequences_flag() -> None:
 def test_parse_args_defaults_none_for_new_flags() -> None:
     """New sampling flags should default to None."""
     args = main.parse_args(["hello"])
+    assert args.temperature is None
     assert args.top_p is None
     assert args.top_k is None
     assert args.stop_sequences is None

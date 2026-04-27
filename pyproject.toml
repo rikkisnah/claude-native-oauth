@@ -1,6 +1,6 @@
 [project]
 name = "claude-native-oauth"
-version = "0.2.1"
+version = "0.2.2"
 description = "Direct Anthropic Messages API access using Claude Code OAuth tokens."
 readme = "README.md"
 requires-python = ">=3.11"
